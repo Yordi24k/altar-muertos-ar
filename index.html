@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<!-- viewport-fit=cover: pantalla completa en celulares con notch -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ofrenda AR · Día de Muertos</title>
+
+<!-- 1) LIBRERÍAS (versiones fijas). AR.js NFT requiere A-Frame 1.3.0 -->
+<script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@ar-js-org/ar.js@3.4.5/aframe/build/aframe-ar-nft.js"></script>
+
+<style>
+  /* 2) ESTILOS DE LA INTERFAZ (la escena AR va debajo) */
+  :root { --naranja:#ff8a00; --morado:#3b1250; --crema:#fff4dc; }
+  /* OJO: el body NO debe tener background. AR.js pone el <video> con z-index
+     negativo; un fondo en body lo taparía y la cámara se vería negra. */
+  html, body { margin:0; height:100%; overflow:hidden; background:transparent;
+    font-family: Georgia, "Times New Roman", serif; }
+  html { -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
+  body { height:100vh; height:100dvh; }              /* dvh = alto real en móvil (barra del navegador) */
+  a-scene { display:block; width:100%; height:100%; }
+  .ui { position:fixed; z-index:10; color:var(--crema); text-align:center; }
+
+  /* Pantalla de carga */
+  #loader { inset:0; background:radial-gradient(circle at 50% 40%, #5a1a6e, var(--morado) 70%);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:14px; padding:24px; transition:opacity .6s; }
+  #loader h1 { margin:0; font-size:1.7rem; color:var(--naranja); }
+  #loader p { margin:0; max-width:320px; line-height:1.4; }
+  .spinner { width:46px; height:46px; border:5px solid rgba(255,255,255,.2);
+    border-top-color:var(--naranja); border-radius:50%; animation:giro 1s linear infinite; }
+  @keyframes giro { to { transform:rotate(360deg); } }
+  #btnStart { display:none; padding:12px 28px; font-size:1.05rem; border:0; border-radius:30px;
+    background:var(--naranja); color:#2a0a38; font-weight:bold; }
+
+  /* Instrucciones sobre la cámara */
+  #hint { left:50%; top:max(18px, env(safe-area-inset-top)); transform:translateX(-50%);
+    background:rgba(59,18,80,.85); padding:10px 18px; border-radius:20px;
+    border:2px solid var(--naranja); font-size:.98rem; width:max-content; max-width:88vw;
+    transition:opacity .4s; pointer-events:none; }
+  /* Botones inferiores */
+  #bar { left:0; right:0; bottom:max(16px, env(safe-area-inset-bottom));
+    display:flex; justify-content:center; gap:12px; }
+  #bar button { min-height:48px; padding:11px 20px; border-radius:26px; border:2px solid var(--naranja);
+    background:rgba(59,18,80,.88); color:var(--crema); font-size:.95rem; }
+  #loaderMsg small { opacity:.7; }
+  @media (max-width:480px) { #hint { font-size:.9rem; padding:9px 14px; } #loader h1 { font-size:1.45rem; } }
+  .hidden { opacity:0; pointer-events:none; }
+</style>
+</head>
+<body>
+
+<!-- 3) PANTALLA DE CARGA. El botón es necesario: los navegadores móviles
+     solo permiten audio tras un toque del usuario. -->
+<div id="loader" class="ui">
+  <div class="spinner" id="spinner"></div>
+  <h1>🌼 Ofrenda en Realidad Aumentada</h1>
+  <p id="loaderMsg">Preparando la cámara y el altar…</p>
+  <p id="diag" style="color:#ffd60a;font-size:.9rem"></p>
+  <button id="btnStart">Comenzar</button>
+</div>
+
+<!-- 4) INSTRUCCIONES Y BOTONES -->
+<div id="hint" class="ui hidden">📷 Apunta la cámara a tu imagen de calavera</div>
+<div id="bar" class="ui hidden">
+  <button id="btnSound">🔊 Sonido</button>
+  <button id="btnReset">↺ Reiniciar</button>
+</div>
+
+<!-- 5) ESCENA AR.
+     - arjs: usa la cámara trasera (webcam) con seguimiento de imagen NFT.
+     - alpha:true deja ver el video de la cámara detrás de los gráficos. -->
+<a-scene
+  vr-mode-ui="enabled: false"
+  embedded
+  renderer="logarithmicDepthBuffer: true; antialias: true; alpha: true"
+  arjs="trackingMethod: best; sourceType: webcam; sourceWidth: 1280; sourceHeight: 960; displayWidth: 1280; displayHeight: 960; debugUIEnabled: false;"
+  device-orientation-permission-ui="enabled: false">
+
+  <!-- 6) MARCADOR NFT: apunta a calavera-tracking.(iset|fset|fset3), en la raíz del repositorio
+       (sin extensión). smooth reduce el temblor del modelo. -->
+  <a-nft id="marker" type="nft" url="calavera-tracking"
+         smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="5">
+
+    <!-- 7) RAÍZ DEL ALTAR. En NFT 1 unidad ≈ 1 px del marcador, por eso se
+         escala ×ESCALA (ajústala con el componente "altar-root").
+         rotation="90 0 0" hace que "arriba" (Y) salga de la hoja. -->
+    <a-entity id="altar" altar-root="scale: 110" rotation="90 0 0">
+
+      <!-- Luces -->
+      <a-light type="ambient" color="#ffe2b8" intensity="0.9"></a-light>
+      <a-light type="directional" color="#fff" intensity="0.6" position="1 3 2"></a-light>
+
+      <!-- Escalones (cubos) -->
+      <a-box position="0 0.10 0" width="2.0" height="0.2" depth="1.0" color="#5b2a86"></a-box>
+      <a-box position="0 0.30 -0.10" width="1.6" height="0.2" depth="0.7" color="#7b3aa8"></a-box>
+      <a-box position="0 0.50 -0.20" width="1.2" height="0.2" depth="0.45" color="#9a4fc4"></a-box>
+
+      <!-- Cempasúchil procedural repartido sobre los escalones -->
+      <a-entity cempasuchil="count: 26; w: 1.9; d: 0.9; y: 0.22; z: 0.05"></a-entity>
+      <a-entity cempasuchil="count: 14; w: 1.5; d: 0.6; y: 0.42; z: -0.1"></a-entity>
+
+      <!-- Foto central con marco (toca para liberar mariposas) -->
+      <a-entity id="foto" class="clickable" position="0 0.98 -0.22" foto-ofrenda>
+        <a-box width="0.62" height="0.78" depth="0.04" color="#c8860a"></a-box>
+        <a-plane position="0 0 0.025" width="0.5" height="0.66" color="#f3e6c8"></a-plane>
+        <a-text value="En memoria\nde un ser\nquerido" align="center" color="#3b1250"
+                position="0 0 0.03" width="1.5"></a-text>
+      </a-entity>
+
+      <!-- Velas (toca para encender/apagar) -->
+      <a-entity vela position="-0.65 0.60 0.1"></a-entity>
+      <a-entity vela position="-0.35 0.60 0.2"></a-entity>
+      <a-entity vela position="0.35 0.60 0.2"></a-entity>
+      <a-entity vela position="0.65 0.60 0.1"></a-entity>
+
+      <!-- Papel picado colgante (toca para que sople el viento) -->
+      <a-entity papel-picado="count: 8; width: 2.2" position="0 1.65 -0.2"></a-entity>
+
+      <!-- Contenedor de mariposas -->
+      <a-entity id="mariposas" position="0 0.98 -0.22"></a-entity>
+    </a-entity>
+  </a-nft>
+
+  <!-- Cámara + cursor: rayOrigin:mouse convierte el toque en un rayo -->
+  <a-entity camera></a-entity>
+  <a-entity cursor="rayOrigin: mouse; fuse: false" raycaster="objects: .clickable; far: 10000"></a-entity>
+</a-scene>
+
+<script>
+/* ============ 8) AUDIO (Web Audio API, sin archivos) ============ */
+const Sfx = {
+  ctx: null, muted: false,
+  init() {                       // se llama tras un toque del usuario
+    if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+  },
+  // Viento / papel: ruido blanco filtrado con barrido de frecuencia
+  viento() {
+    if (this.muted || !this.ctx) return;
+    const c = this.ctx, t = c.currentTime, dur = 1.6;
+    const buf = c.createBuffer(1, c.sampleRate * dur, c.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    const src = c.createBufferSource(); src.buffer = buf;
+    const f = c.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 0.8;
+    f.frequency.setValueAtTime(400, t); f.frequency.linearRampToValueAtTime(1800, t + dur * 0.5);
+    f.frequency.linearRampToValueAtTime(500, t + dur);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.25, t + 0.4);
+    g.gain.linearRampToValueAtTime(0, t + dur);
+    src.connect(f).connect(g).connect(c.destination); src.start(t);
+  },
+  // Campanita suave (encender vela, mariposas)
+  campana(freq = 880) {
+    if (this.muted || !this.ctx) return;
+    const c = this.ctx, t = c.currentTime;
+    [1, 2.01].forEach((m, i) => {
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = 'sine'; o.frequency.value = freq * m;
+      g.gain.setValueAtTime(0.12 / (i + 1), t); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
+      o.connect(g).connect(c.destination); o.start(t); o.stop(t + 1.2);
+    });
+  }
+};
+
+/* ============ 9) UTILIDADES ============ */
+const rnd = (a, b) => a + Math.random() * (b - a);
+
+// Destello de partículas en una posición local del altar
+function destello(parent, pos, color = '#ffb300') {
+  for (let i = 0; i < 14; i++) {
+    const p = document.createElement('a-sphere');
+    p.setAttribute('radius', 0.012); p.setAttribute('color', color);
+    p.setAttribute('material', 'shader: flat');
+    p.setAttribute('position', `${pos.x} ${pos.y} ${pos.z}`);
+    const to = `${pos.x + rnd(-.18, .18)} ${pos.y + rnd(.05, .3)} ${pos.z + rnd(-.18, .18)}`;
+    p.setAttribute('animation__m', `property: position; to: ${to}; dur: 700; easing: easeOutQuad`);
+    p.setAttribute('animation__s', 'property: scale; to: 0 0 0; dur: 700; easing: easeInQuad');
+    parent.appendChild(p);
+    setTimeout(() => p.remove(), 750);
+  }
+}
+
+/* ============ 10) COMPONENTES A-FRAME ============ */
+
+// Escala de la raíz (en NFT las unidades son grandes)
+AFRAME.registerComponent('altar-root', {
+  schema: { scale: { default: 110 } },
+  init() { const s = this.data.scale; this.el.object3D.scale.set(s, s, s); }
+});
+
+// Cempasúchil: esferas aplastadas naranjas/amarillas con centro más oscuro
+AFRAME.registerComponent('cempasuchil', {
+  schema: { count: { default: 20 }, w: { default: 1 }, d: { default: 1 }, y: { default: 0 }, z: { default: 0 } },
+  init() {
+    const cols = ['#ff8a00', '#ffa31a', '#ffb300', '#f57c00'];
+    for (let i = 0; i < this.data.count; i++) {
+      const f = document.createElement('a-entity');
+      f.setAttribute('position', `${rnd(-this.data.w / 2, this.data.w / 2)} ${this.data.y} ${this.data.z + rnd(-this.data.d / 2, this.data.d / 2)}`);
+      const a = document.createElement('a-sphere');
+      a.setAttribute('radius', rnd(0.05, 0.075)); a.setAttribute('scale', '1 0.55 1');
+      a.setAttribute('color', cols[i % cols.length]);
+      const b = document.createElement('a-sphere');
+      b.setAttribute('radius', 0.025); b.setAttribute('position', '0 0.03 0'); b.setAttribute('color', '#b34700');
+      f.append(a, b); this.el.appendChild(f);
+    }
+  }
+});
+
+// Papel picado: banderines con balanceo; al tocar suena viento
+AFRAME.registerComponent('papel-picado', {
+  schema: { count: { default: 8 }, width: { default: 2 } },
+  init() {
+    const cols = ['#ff2d95', '#ff8a00', '#20c997', '#ffd60a', '#7c4dff', '#00b4d8'];
+    const n = this.data.count, w = this.data.width;
+    // Cuerda
+    const cuerda = document.createElement('a-cylinder');
+    cuerda.setAttribute('radius', 0.006); cuerda.setAttribute('height', w);
+    cuerda.setAttribute('rotation', '0 0 90'); cuerda.setAttribute('color', '#ddd');
+    this.el.appendChild(cuerda);
+    this.flags = [];
+    for (let i = 0; i < n; i++) {
+      const x = -w / 2 + (w / (n - 1)) * i;
+      const pivote = document.createElement('a-entity');
+      pivote.setAttribute('position', `${x} 0 0`);
+      pivote.setAttribute('animation__sway', `property: rotation; from: 0 0 -4; to: 0 0 4; dir: alternate; loop: true; dur: ${rnd(1400, 2200)}; easing: easeInOutSine`);
+      const flag = document.createElement('a-plane');
+      flag.className = 'clickable';
+      flag.setAttribute('width', w / n * 0.85); flag.setAttribute('height', 0.22);
+      flag.setAttribute('position', '0 -0.11 0'); flag.setAttribute('color', cols[i % cols.length]);
+      flag.setAttribute('material', 'side: double; opacity: 0.92');
+      // Detalle "picado": rombo recortado (plano del color del fondo no, solo decoración)
+      const hole = document.createElement('a-plane');
+      hole.setAttribute('width', 0.05); hole.setAttribute('height', 0.05);
+      hole.setAttribute('rotation', '0 0 45'); hole.setAttribute('position', '0 0 0.002');
+      hole.setAttribute('color', '#fff'); hole.setAttribute('material', 'opacity: 0.55; side: double');
+      flag.appendChild(hole); pivote.appendChild(flag); this.el.appendChild(pivote);
+      this.flags.push(pivote);
+      flag.addEventListener('click', () => this.soplar());
+    }
+  },
+  soplar() {
+    Sfx.viento();
+    this.flags.forEach(p => {   // ráfaga: balanceo amplio y breve
+      p.setAttribute('animation__gust', 'property: rotation; from: 0 0 -20; to: 0 0 20; dir: alternate; loop: 4; dur: 220; easing: easeInOutSine');
+    });
+  }
+});
+
+// Vela: tocar = encender/apagar con destello + campana
+AFRAME.registerComponent('vela', {
+  init() {
+    const el = this.el; this.encendida = false;
+    const cuerpo = document.createElement('a-cylinder');
+    cuerpo.className = 'clickable';
+    cuerpo.setAttribute('radius', 0.035); cuerpo.setAttribute('height', 0.2);
+    cuerpo.setAttribute('position', '0 0.1 0'); cuerpo.setAttribute('color', '#f8f1e0');
+    // Zona táctil más grande e invisible (más fácil de tocar con el dedo)
+    const zona = document.createElement('a-sphere');
+    zona.className = 'clickable'; zona.setAttribute('radius', 0.14);
+    zona.setAttribute('position', '0 0.15 0'); zona.setAttribute('material', 'visible: false');
+    // Llama + luz con parpadeo
+    this.llama = document.createElement('a-cone');
+    this.llama.setAttribute('radius-bottom', 0.022); this.llama.setAttribute('radius-top', 0);
+    this.llama.setAttribute('height', 0.075); this.llama.setAttribute('position', '0 0.24 0');
+    this.llama.setAttribute('color', '#ffcc33'); this.llama.setAttribute('material', 'shader: flat');
+    this.llama.setAttribute('animation__flick', 'property: scale; from: 1 0.8 1; to: 1.15 1.25 1.15; dir: alternate; loop: true; dur: 140; easing: easeInOutSine');
+    this.luz = document.createElement('a-light');
+    this.luz.setAttribute('type', 'point'); this.luz.setAttribute('color', '#ff9d2e');
+    this.luz.setAttribute('distance', 1.5); this.luz.setAttribute('position', '0 0.28 0');
+    el.append(cuerpo, zona, this.llama, this.luz);
+    this.poner(false);
+    const alternar = () => this.alternar();
+    cuerpo.addEventListener('click', alternar); zona.addEventListener('click', alternar);
+  },
+  poner(on) {
+    this.encendida = on;
+    this.llama.setAttribute('visible', on);
+    this.luz.setAttribute('intensity', on ? 1.1 : 0);
+  },
+  alternar() {
+    this.poner(!this.encendida);
+    destello(this.el, { x: 0, y: 0.26, z: 0 }, this.encendida ? '#ffb300' : '#cccccc');
+    Sfx.campana(this.encendida ? 880 : 520);
+  },
+  reiniciar() { this.poner(false); }
+});
+
+// Foto: tocar libera mariposas monarca que orbitan y se desvanecen
+AFRAME.registerComponent('foto-ofrenda', {
+  init() { this.el.addEventListener('click', () => this.mariposas()); },
+  mariposas() {
+    const cont = document.getElementById('mariposas');
+    Sfx.campana(1175); Sfx.viento();
+    for (let i = 0; i < 5; i++) {
+      // pivote que gira = órbita; hijo desplazado = mariposa
+      const orbita = document.createElement('a-entity');
+      orbita.setAttribute('rotation', `0 ${rnd(0, 360)} 0`);
+      orbita.setAttribute('animation__o', `property: rotation; to: 0 ${rnd(0, 1) > .5 ? 720 : -720} 0; dur: ${rnd(7000, 10000)}; easing: linear`);
+      const m = document.createElement('a-entity');
+      m.setAttribute('position', `${rnd(0.5, 0.9)} ${rnd(-0.2, 0.7)} 0`);
+      m.setAttribute('animation__b', `property: position; to: ${rnd(0.5, 0.9)} ${rnd(-0.2, 0.7)} 0.1; dir: alternate; loop: true; dur: 1200; easing: easeInOutSine`);
+      const alas = document.createElement('a-entity');
+      alas.setAttribute('animation__f', 'property: scale; from: 1 1 1; to: 0.15 1 1; dir: alternate; loop: true; dur: 170; easing: easeInOutSine');
+      ['-0.035', '0.035'].forEach(x => {
+        const ala = document.createElement('a-plane');
+        ala.setAttribute('width', 0.07); ala.setAttribute('height', 0.055);
+        ala.setAttribute('position', `${x} 0 0`); ala.setAttribute('color', '#ff7a00');
+        ala.setAttribute('material', 'side: double; shader: flat');
+        const borde = document.createElement('a-plane');   // borde oscuro tipo monarca
+        borde.setAttribute('width', 0.07); borde.setAttribute('height', 0.012);
+        borde.setAttribute('position', '0 -0.022 0.001'); borde.setAttribute('color', '#1a1a1a');
+        borde.setAttribute('material', 'side: double; shader: flat');
+        ala.appendChild(borde); alas.appendChild(ala);
+      });
+      m.appendChild(alas); orbita.appendChild(m); cont.appendChild(orbita);
+      setTimeout(() => orbita.remove(), 10500);  // se retiran solas
+    }
+  }
+});
+
+/* ============ 11) CONTROL DE LA INTERFAZ ============ */
+const $ = id => document.getElementById(id);
+const marker = $('marker'), scene = document.querySelector('a-scene');
+let targetVisto = false;
+
+// Cuando la cámara/escena está lista, mostrar botón "Comenzar"
+// Los navegadores integrados (WhatsApp, Instagram, Facebook...) suelen bloquear la cámara
+const enApp = /FBAN|FBAV|Instagram|WhatsApp|Line\/|MicroMessenger|Snapchat|TikTok/i.test(navigator.userAgent);
+function avisar(html) {
+  $('spinner').style.display = 'none'; $('btnStart').style.display = 'none';
+  $('loaderMsg').innerHTML = html; $('loader').classList.remove('hidden');
+}
+window.addEventListener('camera-error', e => avisar(
+  '⚠️ No se pudo abrir la cámara. Permite el acceso en el candado junto a la dirección y recarga.<br><small>' +
+  ((e.detail && e.detail.error && e.detail.error.name) || '') + '</small>'));
+if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
+  avisar('Este navegador no permite usar la cámara. Abre el enlace en Chrome o Safari.');
+
+function listo() {
+  $('spinner').style.display = 'none';
+  $('loaderMsg').innerHTML = enApp
+    ? '⚠️ Estás dentro de otra app. Toca ⋮ o el icono de compartir y elige <b>Abrir en Chrome/Safari</b>, o la cámara no funcionará.'
+    : 'Necesitas la imagen objetivo impresa o en otra pantalla. Permite el acceso a la cámara.';
+  $('btnStart').style.display = 'block';
+}
+window.addEventListener('arjs-video-loaded', listo);
+setTimeout(() => { if ($('btnStart').style.display !== 'block') listo(); }, 6000); // respaldo
+
+$('btnStart').addEventListener('click', () => {
+  Sfx.init();                                        // desbloquea el audio
+  const v = document.querySelector('video');         // iOS a veces deja el video en pausa
+  if (v && v.play) v.play().catch(() => {});
+  $('loader').classList.add('hidden');
+  if (nftFaltan) $('hint').textContent = nftFaltan;
+  $('hint').classList.remove('hidden'); $('bar').classList.remove('hidden');
+});
+
+// Imagen reconocida / perdida
+marker.addEventListener('markerFound', () => {
+  targetVisto = true; $('hint').classList.add('hidden');
+  Sfx.viento(); Sfx.campana(660);
+});
+marker.addEventListener('markerLost', () => {
+  $('hint').textContent = '🔍 Imagen perdida: vuelve a apuntar';
+  $('hint').classList.remove('hidden');
+});
+
+// Diagnóstico: ¿existen los archivos del marcador NFT en el servidor?
+let nftFaltan = '';
+(async () => {
+  const base = Element.prototype.getAttribute.call(marker, 'url');
+  const faltan = [];
+  for (const ext of ['iset', 'fset', 'fset3']) {
+    try { const r = await fetch(base + '.' + ext, { method: 'HEAD', cache: 'no-store' }); if (!r.ok) faltan.push(ext); }
+    catch (e) { faltan.push(ext); }
+  }
+  if (faltan.length) {
+    nftFaltan = '⚠️ No se encuentran los archivos del marcador (' + faltan.map(x => '.' + x).join(', ') + ') en «' + base + '»';
+    $('diag').textContent = nftFaltan; console.error(nftFaltan);
+  }
+})();
+
+// Sonido on/off
+$('btnSound').addEventListener('click', () => {
+  Sfx.muted = !Sfx.muted;
+  $('btnSound').textContent = Sfx.muted ? '🔇 Sonido' : '🔊 Sonido';
+});
+
+// Reiniciar: apaga velas y quita mariposas
+$('btnReset').addEventListener('click', () => {
+  document.querySelectorAll('[vela]').forEach(v => v.components.vela.reiniciar());
+  $('mariposas').innerHTML = '';
+  $('hint').textContent = '📷 Apunta la cámara a tu imagen de calavera';
+  if (!targetVisto) $('hint').classList.remove('hidden');
+});
+</script>
+</body>
+</html>
